@@ -1,10 +1,11 @@
 from django.shortcuts import render
 from rest_framework.views import APIView
 from todo.models import Todo
-from todo.serializers import TodoSerializer
+from todo.serializers import TodoSerializer,UserCreationSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import mixins,generics
+from django.contrib.auth.models import User
 # Create your views here.
 
 # api/v1/todos (use plurals)
@@ -96,3 +97,12 @@ class TodoDetailsMixin(generics.GenericAPIView,
 
     def delete(self,request,*args,**kwargs):
         return self.destroy(request,*args,**kwargs)
+
+
+
+class UserCreationView(generics.GenericAPIView,mixins.CreateModelMixin):
+    model = User
+    serializer_class = UserCreationSerializer
+
+    def post(self,request,*args,**kwargs):
+        return self.create(request,*args,**kwargs)
