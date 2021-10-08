@@ -1,11 +1,15 @@
 from django.shortcuts import render
 from rest_framework.views import APIView
 from todo.models import Todo
-from todo.serializers import TodoSerializer,UserCreationSerializer
+from todo.serializers import TodoSerializer,UserCreationSerializer,LoginSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import mixins,generics
 from django.contrib.auth.models import User
+from django.contrib.auth import authenticate,login,logout
+from rest_framework.authentication import BasicAuthentication,SessionAuthentication,TokenAuthentication
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authtoken.models import Token
 # Create your views here.
 
 # api/v1/todos (use plurals)
@@ -44,7 +48,7 @@ class TodoDetail(APIView):
 
     def get(self,request,*args,**kwargs):
         todo=self.model.objects.get(id=kwargs['id'])
-        # todo=self.modelobjects.get(kwargs["id"])
+        # todo=self.model.objects.get(kwargs["id"])
         serilizer = self.serializer_class(todo)
         return Response(serilizer.data,status=status.HTTP_200_OK)
 
@@ -66,14 +70,31 @@ class TodoDetail(APIView):
 
 
 
-class TodoMixinList(generics.GenericAPIView,mixins.ListModelMixin,mixins.CreateModelMixin):
+class TodoMixinList(generics.GenericAPIView,
+                    mixins.ListModelMixin,mixins.CreateModelMixin):
 
     model= Todo
     serializer_class = TodoSerializer
     queryset = Todo.objects.all()
+    # authentication_classes = [BasicAuthentication,SessionAuthentication]
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.model.objects.filter(user=self.request.user)
+
+    def perform_update(self, serilalizer):
+        user=self.request.user
+        serilalizer.save(user=user)
+
 
     def get(self,request,*args,**kwargs):
         return self.list(request,*args,**kwargs)
+
+    def perform_create(self, serializer):
+        user=self.request.user
+        serializer.save(user=user)
+        print(user)
 
     def post(self, request, *args, **kwargs):
         return self.create(request,*args,**kwargs)
@@ -88,9 +109,14 @@ class TodoDetailsMixin(generics.GenericAPIView,
     serializer_class = TodoSerializer
     queryset = model.objects.all()
     lookup_field = "id"
-
+    # authentication_classes = [BasicAuthentication,SessionAuthentication]
+    authentication_classes = [TokenAuthentication]
     def get(self,request,*args,**kwargs):
         return self.retrieve(request,*args,**kwargs)
+
+    def perform_update(self, serilalizer):
+        user=self.request.user
+        serilalizer.save(user=user)
 
     def put(self, request, *args, **kwargs):
         return self.update(request,*args,**kwargs)
@@ -106,3 +132,24 @@ class UserCreationView(generics.GenericAPIView,mixins.CreateModelMixin):
 
     def post(self,request,*args,**kwargs):
         return self.create(request,*args,**kwargs)
+
+
+class SignInView(APIView):
+    serializer_class = LoginSerializer
+
+    def post(self,request,*args,**kwargs):
+        serializer = self.serializer_class(data=request.data)
+        if serializer.is_valid():
+            username = serializer.validated_data["username"]
+            password = serializer.validated_data['password']
+            user = authenticate(request,username=username,password=password)
+            if user:
+                login(request,user)
+                token,created = Token.objects.get_or_create(user=user)
+                return Response({"token":token.key},status=status.HTTP_200_OK)
+            else:
+                return Response({"message":"invalid user"},status=status.HTTP_400_BAD_REQUEST)
+
+        else:
+            return Response(serializer.errors)
+
